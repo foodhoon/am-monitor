@@ -4,13 +4,9 @@
 
 ## 系统预览
 
-### 1. 实时监控与去噪分析主看板
+### 实时监控与去噪分析主看板
 ![Dashboard Overview](./docs/dashboard.png)
 
-### 2. RBAC 权限管理与操作审计后台
-![Admin & Audit Panel](./docs/admin-panel.png)
-
----
 
 ## 核心功能与技术架构
 
