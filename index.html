@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Multi-Channel Sales Pulse | 跨境多渠道销量监测与去噪看板</title>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --panel: #1e293b;
+      --panel-soft: #263349;
+      --border: #334155;
+      --text: #f1f5f9;
+      --muted: #94a3b8;
+      --primary: #38bdf8;
+      --success: #22c55e;
+      --warning: #f59e0b;
+      --danger: #ef4444;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+      padding: 20px;
+    }
+    .container { max-width: 1200px; margin: 0 auto; }
+    header {
+      display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center;
+      gap: 12px; padding-bottom: 18px; border-bottom: 1px solid var(--border); margin-bottom: 20px;
+    }
+    .title-group h1 { font-size: 1.25rem; font-weight: 700; display: flex; align-items: center; gap: 10px; }
+    .badge {
+      font-size: 0.75rem; padding: 2px 8px; border-radius: 999px;
+      background: rgba(56, 189, 248, 0.15); color: var(--primary); border: 1px solid rgba(56, 189, 248, 0.3);
+    }
+    .badge.live { background: rgba(34, 197, 94, 0.15); color: var(--success); border-color: rgba(34, 197, 94, 0.3); }
+    .header-actions { display: flex; align-items: center; gap: 10px; font-size: 0.85rem; color: var(--muted); }
+    button {
+      background: var(--panel-soft); color: var(--text); border: 1px solid var(--border);
+      padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 0.85rem; transition: 0.15s;
+    }
+    button:hover { border-color: var(--primary); color: var(--primary); }
+    button.btn-primary { background: var(--primary); color: #0f172a; font-weight: 600; border: none; }
+    button.btn-primary:hover { opacity: 0.9; color: #0f172a; }
+    button.btn-danger { color: var(--danger); border-color: rgba(239, 68, 68, 0.4); }
+
+    .toolbar {
+      display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center;
+      gap: 16px; background: var(--panel); padding: 14px 18px; border-radius: 10px;
+      border: 1px solid var(--border); margin-bottom: 20px;
+    }
+    .control-group { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+    select, input[type="number"] {
+      background: var(--bg); color: var(--text); border: 1px solid var(--border);
+      padding: 6px 10px; border-radius: 6px; font-size: 0.85rem;
+    }
+    input[type="range"] { accent-color: var(--primary); cursor: pointer; }
+
+    .kpi-grid {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 16px; margin-bottom: 20px;
+    }
+    .kpi-card {
+      background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 16px;
+    }
+    .kpi-label { font-size: 0.8rem; color: var(--muted); margin-bottom: 6px; }
+    .kpi-value { font-size: 1.65rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+    .kpi-sub { font-size: 0.78rem; color: var(--muted); margin-top: 4px; }
+
+    .main-grid { display: grid; grid-template-columns: 1fr 2fr; gap: 20px; }
+    @media (max-width: 860px) { .main-grid { grid-template-columns: 1fr; } }
+
+    .card {
+      background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 16px;
+    }
+    .card-header {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-bottom: 14px; font-weight: 600; font-size: 0.95rem;
+    }
+    .channel-item { margin-bottom: 14px; }
+    .channel-meta { display: flex; justify-content: space-between; font-size: 0.85rem; margin-bottom: 4px; }
+    .bar-bg { height: 8px; background: var(--bg); border-radius: 999px; overflow: hidden; }
+    .bar-fill { height: 100%; background: var(--primary); border-radius: 999px; transition: width 0.3s; }
+
+    table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+    th, td { text-align: left; padding: 10px 8px; border-bottom: 1px solid var(--border); }
+    th { color: var(--muted); font-weight: 500; }
+    tr.outlier { opacity: 0.55; background: rgba(239, 68, 68, 0.06); }
+    tr.outlier td.delta { text-decoration: line-through; color: var(--danger); }
+    .tag {
+      padding: 2px 6px; border-radius: 4px; font-size: 0.75rem;
+      background: var(--panel-soft); color: var(--primary);
+    }
+
+    dialog {
+      background: var(--panel); color: var(--text); border: 1px solid var(--border);
+      border-radius: 10px; padding: 20px; max-width: 640px; width: 92%; margin: auto;
+    }
+    dialog::backdrop { background: rgba(0, 0, 0, 0.65); }
+    .log-list { max-height: 280px; overflow-y: auto; font-size: 0.8rem; color: var(--muted); margin-top: 12px; }
+    .log-item { padding: 6px 0; border-bottom: 1px solid var(--border); }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div class="title-group">
+        <h1>
+          Multi-Channel Sales Pulse
+          <span class="badge live" id="statusBadge">进行中 · KST</span>
+          <span class="badge" id="modeBadge">Demo Snapshot</span>
+        </h1>
+      </div>
+      <div class="header-actions">
+        <span>管理员: <strong id="currentUser">admin_demo</strong></span>
+        <button onclick="simulateNewOrder()">+ 模拟增量</button>
+        <button onclick="openAuditModal()">审计日志 (<span id="logCount">0</span>)</button>
+      </div>
+    </header>
+
+    <div class="toolbar">
+      <div class="control-group">
+        <label>监测活动：</label>
+        <select id="campaignSelect" onchange="switchCampaign()">
+          <option value="camp_01">[Q4 Campaign] 跨境多渠道限量活动 A（抽选 50 名）</option>
+          <option value="camp_02">[Q4 Campaign] 全球线上首发特典活动 B（抽选 30 名）</option>
+        </select>
+      </div>
+      <div class="control-group">
+        <label for="denoiseSlider">去水衰减系数：<strong id="denoiseVal">0.85</strong></label>
+        <input id="denoiseSlider" type="range" min="0.10" max="1.00" step="0.01" value="0.85" oninput="render()" />
+        <label for="slotsInput">名额：</label>
+        <input id="slotsInput" type="number" min="1" max="500" value="50" style="width:72px" oninput="render()" />
+      </div>
+    </div>
+
+    <div class="kpi-grid">
+      <div class="kpi-card">
+        <div class="kpi-label">原始累计总销量 (Raw Total)</div>
+        <div class="kpi-value" id="kpiRaw">0</div>
+        <div class="kpi-sub">跨 4 渠道实时汇总</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">人工剔除异常量 (Outliers)</div>
+        <div class="kpi-value" style="color: var(--danger);" id="kpiOutlier">0</div>
+        <div class="kpi-sub" id="kpiOutlierCount">已标记 0 笔异常脉冲</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">去水预估纯净销量 (Denoised)</div>
+        <div class="kpi-value" style="color: var(--primary);" id="kpiDenoised">0</div>
+        <div class="kpi-sub">(总销量 - 异常量) × 衰减系数</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">预估中选均线 (Est. Cutline)</div>
+        <div class="kpi-value" style="color: var(--success);" id="kpiCutline">0.0</div>
+        <div class="kpi-sub">单人平均基准线</div>
+      </div>
+    </div>
+
+    <div class="main-grid">
+      <div class="card">
+        <div class="card-header"><span>分渠道销量分布</span></div>
+        <div id="channelContainer"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <span>实时增量明细与异常清洗</span>
+          <span style="font-size:0.78rem; color:var(--muted);">点击操作可动态剔除刷单水分</span>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>时间 (KST)</th>
+              <th>渠道标识</th>
+              <th>增量 (Delta)</th>
+              <th>状态</th>
+              <th>去噪操作</th>
+            </tr>
+          </thead>
+          <tbody id="orderTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <dialog id="auditModal">
+    <div style="display:flex; justify-content:space-between; align-items:center;">
+      <h3>RBAC 操作审计日志 (Audit Trail)</h3>
+      <div style="display:flex; gap:8px;">
+        <button class="btn-primary" onclick="exportLogsCsv()">导出 CSV</button>
+        <button onclick="document.getElementById('auditModal').close()">关闭</button>
+      </div>
+    </div>
+    <div class="log-list" id="auditLogList"></div>
+  </dialog>
+
+  <script>
+    const CACHE_KEY = "cutline_demo_snapshot_v1";
+
+    const DEFAULT_STATE = {
+      activeId: "camp_01",
+      campaigns: {
+        camp_01: {
+          slots: 50,
+          factor: 0.85,
+          orders: [
+            { id: 101, time: "13:24:10", channel: "KR-UID", delta: 120, outlier: false },
+            { id: 102, time: "13:18:45", channel: "GLOBAL-PID", delta: 850, outlier: true },
+            { id: 103, time: "13:10:02", channel: "JP-PID", delta: 64, outlier: false },
+            { id: 104, time: "12:55:30", channel: "CN-PID", delta: 210, outlier: false },
+            { id: 105, time: "12:41:19", channel: "KR-UID", delta: 95, outlier: false }
+          ]
+        },
+        camp_02: {
+          slots: 30,
+          factor: 0.90,
+          orders: [
+            { id: 201, time: "13:20:00", channel: "GLOBAL-PID", delta: 140, outlier: false },
+            { id: 202, time: "13:05:12", channel: "KR-UID", delta: 480, outlier: true },
+            { id: 203, time: "12:48:33", channel: "CN-PID", delta: 88, outlier: false }
+          ]
+        }
+      },
+      logs: [
+        { ts: "2026-11-13 13:19:00", actor: "admin_demo", action: "OUTLIER_TAG", detail: "标记订单 #102 (+850) 为异常注水" }
+      ]
+    };
+
+    let state = JSON.parse(localStorage.getItem(CACHE_KEY)) || DEFAULT_STATE;
+
+    function saveCache() {
+      localStorage.setItem(CACHE_KEY, JSON.stringify(state));
+    }
+
+    function addLog(action, detail) {
+      const now = new Date().toISOString().replace("T", " ").slice(0, 19);
+      state.logs.unshift({ ts: now, actor: "admin_demo", action, detail });
+      saveCache();
+    }
+
+    function switchCampaign() {
+      state.activeId = document.getElementById("campaignSelect").value;
+      const camp = state.campaigns[state.activeId];
+      document.getElementById("denoiseSlider").value = camp.factor;
+      document.getElementById("slotsInput").value = camp.slots;
+      render();
+    }
+
+    function toggleOutlier(orderId) {
+      const camp = state.campaigns[state.activeId];
+      const target = camp.orders.find(o => o.id === orderId);
+      if (!target) return;
+      target.outlier = !target.outlier;
+      addLog(
+        target.outlier ? "OUTLIER_TAG" : "OUTLIER_RESTORE",
+        `${target.outlier ? "剔除" : "恢复"}订单 #${target.id} (${target.channel}, +${target.delta})`
+      );
+      render();
+    }
+
+    function simulateNewOrder() {
+      const camp = state.campaigns[state.activeId];
+      const channels = ["KR-UID", "GLOBAL-PID", "JP-PID", "CN-PID"];
+      const ch = channels[Math.floor(Math.random() * channels.length)];
+      const delta = Math.floor(Math.random() * 140) + 15;
+      const now = new Date().toTimeString().slice(0, 8);
+      const id = Date.now() % 10000;
+      camp.orders.unshift({ id, time: now, channel: ch, delta, outlier: false });
+      addLog("DELTA_INGEST", `捕获新增量 #${id}: ${ch} +${delta}`);
+      render();
+    }
+
+    function render() {
+      const camp = state.campaigns[state.activeId];
+      camp.factor = parseFloat(document.getElementById("denoiseSlider").value);
+      camp.slots = Math.max(1, parseInt(document.getElementById("slotsInput").value || "1", 10));
+      document.getElementById("denoiseVal").textContent = camp.factor.toFixed(2);
+
+      let rawTotal = 0;
+      let outlierTotal = 0;
+      let outlierCount = 0;
+      const channelMap = { "KR-UID": 0, "GLOBAL-PID": 0, "JP-PID": 0, "CN-PID": 0 };
+
+      camp.orders.forEach(o => {
+        rawTotal += o.delta;
+        if (o.outlier) {
+          outlierTotal += o.delta;
+          outlierCount += 1;
+        } else {
+          channelMap[o.channel] = (channelMap[o.channel] || 0) + o.delta;
+        }
+      });
+
+      const validTotal = Math.max(0, rawTotal - outlierTotal);
+      const denoisedTotal = Math.round(validTotal * camp.factor);
+      const cutline = (denoisedTotal / camp.slots).toFixed(1);
+
+      document.getElementById("kpiRaw").textContent = rawTotal.toLocaleString();
+      document.getElementById("kpiOutlier").textContent = outlierTotal.toLocaleString();
+      document.getElementById("kpiOutlierCount").textContent = `已标记 ${outlierCount} 笔异常脉冲`;
+      document.getElementById("kpiDenoised").textContent = denoisedTotal.toLocaleString();
+      document.getElementById("kpiCutline").textContent = cutline;
+      document.getElementById("logCount").textContent = state.logs.length;
+
+      // 渲染渠道分布
+      const chEl = document.getElementById("channelContainer");
+      chEl.innerHTML = Object.entries(channelMap).map(([ch, val]) => {
+        const pct = validTotal > 0 ? ((val / validTotal) * 100).toFixed(1) : 0;
+        return `
+          <div class="channel-item">
+            <div class="channel-meta">
+              <span>${ch}</span>
+              <span>${val.toLocaleString()} (${pct}%)</span>
+            </div>
+            <div class="bar-bg"><div class="bar-fill" style="width:${pct}%"></div></div>
+          </div>
+        `;
+      }).join("");
+
+      // 渲染明细表格
+      const tbody = document.getElementById("orderTableBody");
+      tbody.innerHTML = camp.orders.map(o => `
+        <tr class="${o.outlier ? "outlier" : ""}">
+          <td>${o.time}</td>
+          <td><span class="tag">${o.channel}</span></td>
+          <td class="delta">+${o.delta}</td>
+          <td>${o.outlier ? "异常注水" : "有效增量"}</td>
+          <td>
+            <button class="${o.outlier ? "" : "btn-danger"}" onclick="toggleOutlier(${o.id})">
+              ${o.outlier ? "恢复计入" : "剔除异常"}
+            </button>
+          </td>
+        </tr>
+      `).join("");
+
+      saveCache();
+    }
+
+    function openAuditModal() {
+      const list = document.getElementById("auditLogList");
+      list.innerHTML = state.logs.map(l => `
+        <div class="log-item">
+          <strong>[${l.ts}]</strong> <span>(${l.actor})</span> — <code>${l.action}</code>: ${l.detail}
+        </div>
+      `).join("");
+      document.getElementById("auditModal").showModal();
+    }
+
+    function exportLogsCsv() {
+      const rows = [["Timestamp", "Actor", "Action", "Detail"], ...state.logs.map(l => [l.ts, l.actor, l.action, l.detail])];
+      const csv = "\uFEFF" + rows.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n");
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = "sales_audit_logs.csv";
+      a.click();
+    }
+
+    // 尝试连接真实 Serverless 后端，若未部署则平滑运行本地演示快照
+    fetch("/api/bootstrap")
+      .then(res => res.ok ? res.json() : Promise.reject())
+      .then(data => {
+        if (data && data.campaigns) {
+          state = data;
+          document.getElementById("modeBadge").textContent = "Serverless KV Live";
+          render();
+        }
+      })
+      .catch(() => render());
+  </script>
+</body>
+</html>
